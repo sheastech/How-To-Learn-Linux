@@ -1,10 +1,12 @@
-The previous output is already formatted as a single Markdown file. You can simply copy the entire text below and paste it into a file named, for example, `rocky_linux_harden.md`.
+I understand. Since the previous output was already in pure Markdown, making it "GitHub friendly" means ensuring all formatting is standard and accessible for direct use in a GitHub repository's `README.md` or a similar documentation file.
+
+Here is the complete guide, optimized for clarity, standard Markdown rendering, and ease of use on GitHub.
 
 -----
 
 # 🔒 Installing and Hardening Rocky Linux 10
 
-This guide provides step-by-step instructions for installing Rocky Linux 10 and immediately applying essential security hardening measures.
+This guide provides step-by-step instructions for performing a minimal installation of Rocky Linux 10 and immediately applying essential security hardening measures suitable for production environments.
 
 -----
 
@@ -12,7 +14,7 @@ This guide provides step-by-step instructions for installing Rocky Linux 10 and 
 
 ### 1.1 Obtain the Installation Media
 
-1.  **Download:** Obtain the official Rocky Linux 10 **Minimal ISO** from the official Rocky Linux website (when available). The **Minimal installation** is preferred for hardening as it reduces the attack surface.
+1.  **Download:** Obtain the official Rocky Linux 10 **Minimal ISO** from the official Rocky Linux website (when available). The **Minimal installation** is highly recommended as it reduces the attack surface.
 2.  **Verify:** Check the downloaded ISO's integrity using the provided checksum (SHA256).
 3.  **Create Media:** Create a bootable USB drive or mount the ISO in your virtual environment.
 
@@ -23,19 +25,19 @@ This guide provides step-by-step instructions for installing Rocky Linux 10 and 
 
 ### 1.3 Configure Installation Options
 
-Proceed through the Anaconda installer, paying close attention to the following sections:
+Proceed through the Anaconda installer, focusing on the following security-critical sections:
 
 | Section | Recommended Configuration | Rationale |
 | :--- | :--- | :--- |
-| **Software Selection** | **Minimal Install** | Reduces the attack surface by installing only essential packages. |
-| **Installation Destination** | **Custom Partitioning** | Allows for separate mount points for enhanced security. |
-| **Networking & Hostname** | Set a descriptive **Hostname** (e.g., `server01.local`). | Enable the network adapter and set a static IP address if required. |
+| **Software Selection** | **Minimal Install** | Installs only essential packages, minimizing the attack surface. |
+| **Installation Destination** | **Custom Partitioning** | Allows for separate mount points to contain potential compromises. |
+| **Networking & Hostname** | Set a descriptive **Hostname** (e.g., `server01.local`). | Configure static IP addressing if required. |
 | **Root Password** | Set a **strong, unique password** for the `root` user. | Essential security practice. |
-| **User Creation** | Create a standard user account with **Administrator** privileges checked (for use with `sudo`). | Avoids daily direct login as `root`. |
+| **User Creation** | Create a standard user account and check the box for **Administrator** privileges (`sudo`). | Avoids daily direct login as `root`. |
 
 ### 1.4 Partitioning Recommendations
 
-For security and stability, use separate partitions for sensitive directories.
+Using separate partitions for sensitive directories is a key security measure.
 
   * `/boot` (1 GB, ext4)
   * `/` (Root, 50 GB+, ext4 or XFS)
@@ -53,11 +55,11 @@ For security and stability, use separate partitions for sensitive directories.
 
 ## 2\. Initial Hardening & Configuration
 
-After the first reboot, log in with the standard user account you created.
+Log in with the standard user account created during installation.
 
 ### 2.1 Update the System
 
-Ensure all packages are up to date to patch known vulnerabilities.
+Ensure all packages are up to date to patch known vulnerabilities immediately.
 
 ```bash
 sudo dnf update -y
@@ -66,49 +68,50 @@ sudo reboot
 
 ### 2.2 Disable Unnecessary Services
 
-Review and stop any services not required for your server's purpose.
+Stop and disable any services not required for the server's function.
 
 ```bash
 # List all running services
 sudo systemctl list-unit-files --state=enabled | grep enabled
 
-# Example command to disable a service (e.g., cups if not printing)
+# Example: Disable the CUPS service if printing is not needed
 # sudo systemctl disable cups.service
 ```
 
 ### 2.3 Configure Firewall
 
-Configure **firewalld** to only allow necessary traffic.
+Configure **firewalld** to operate on the principle of **least privilege**.
 
 ```bash
 # Enable the firewall service
 sudo systemctl enable --now firewalld
 
-# Set the default zone
+# Set the default zone (e.g., public for internet-facing servers)
 sudo firewall-cmd --set-default-zone=public --permanent
 
-# Allow only SSH (required for remote access)
+# Allow only necessary services (e.g., SSH is mandatory for remote access)
 sudo firewall-cmd --permanent --add-service=ssh
 
 # Example: Allow web traffic
 # sudo firewall-cmd --permanent --add-service=http
 # sudo firewall-cmd --permanent --add-service=https
 
-# Reload the firewall
+# Reload the firewall to apply changes
 sudo firewall-cmd --reload
 ```
 
 ### 2.4 Install Auditing Tools
 
-Install tools to monitor and log system activity and integrity.
+Install tools for monitoring file integrity and system activity.
 
 ```bash
 # Install the Audit daemon for system-wide auditing
 sudo dnf install audit -y
 # Optional: Install AIDE (Advanced Intrusion Detection Environment)
-# sudo dnf install aide -y
-# sudo aide --init
-# sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+sudo dnf install aide -y
+# Initialize AIDE's baseline database
+sudo aide --init
+sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
 ```
 
 -----
@@ -119,7 +122,7 @@ Secure your primary remote access vector, **SSH**.
 
 ### 3.1 Edit the SSH Configuration
 
-Open the configuration file:
+Open the main configuration file:
 
 ```bash
 sudo nano /etc/ssh/sshd_config
@@ -131,9 +134,9 @@ Modify or add the following lines:
 
 | Setting | Recommended Value | Rationale |
 | :--- | :--- | :--- |
-| `Port` | `[A high, custom number > 1024]` | Prevents trivial port-scanning attempts on the default port 22. |
+| `Port` | `[A high, custom number > 1024]` | Obscures the service from trivial port-scanning attempts on default port 22. |
 | `PermitRootLogin` | `no` | Prevents direct root login via SSH. |
-| `PasswordAuthentication` | `no` | **Highly Recommended.** Enforces key-based authentication. |
+| `PasswordAuthentication` | `no` | **Highly Recommended.** Enforces secure key-based authentication. |
 | `ClientAliveInterval` | `300` | Logs out idle sessions after 5 minutes (300 seconds). |
 | `MaxAuthTries` | `3` | Limits the number of failed login attempts. |
 
@@ -189,7 +192,7 @@ sudo sysctl -p /etc/sysctl.d/99-sysctl.conf
 
 ### 4.2 Restrict Sudo Use
 
-Ensure only users in the `wheel` group can use the `sudo` command.
+Ensure only users in the `wheel` group have `sudo` privileges.
 
 ```bash
 sudo visudo
@@ -199,13 +202,13 @@ sudo visudo
 
 ### 4.3 Configure SELinux
 
-Ensure **SELinux** (Security-Enhanced Linux) remains in **Enforcing** mode. **Do not disable it.**
+**Do not disable SELinux**. Ensure it remains in **Enforcing** mode.
 
 ```bash
 sestatus
 ```
 
-If you install new services, use `semanage` to update policies instead of changing the overall mode.
+If you install new services or change default ports, use `semanage` to update policies without changing the overall mode.
 
 ### 4.4 Set Password Policy
 
@@ -215,7 +218,7 @@ Enforce a strong password policy using the `pam_pwquality` module.
 sudo nano /etc/security/pwquality.conf
 ```
 
-Adjust parameters for strong requirements (e.g., minimum length 14, requiring mixed case, digits, and symbols):
+Adjust parameters for strong requirements (e.g., minimum length 14, mixed case, digits, and symbols):
 
 ```pwquality
 minlen = 14
@@ -231,7 +234,7 @@ ocredit = -1
 
 ### 5.1 Regular Updates
 
-Schedule regular system updates.
+Schedule regular system updates to apply patches.
 
 ```bash
 sudo dnf update -y
@@ -239,7 +242,7 @@ sudo dnf update -y
 
 ### 5.2 Intrusion Detection Checks
 
-Regularly check your AIDE database for file changes (if AIDE was installed).
+Regularly check your AIDE database for file changes against the baseline.
 
 ```bash
 # Check for changes
