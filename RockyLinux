@@ -1,0 +1,255 @@
+The previous output is already formatted as a single Markdown file. You can simply copy the entire text below and paste it into a file named, for example, `rocky_linux_harden.md`.
+
+-----
+
+# 🔒 Installing and Hardening Rocky Linux 10
+
+This guide provides step-by-step instructions for installing Rocky Linux 10 and immediately applying essential security hardening measures.
+
+-----
+
+## 1\. Installation Phase
+
+### 1.1 Obtain the Installation Media
+
+1.  **Download:** Obtain the official Rocky Linux 10 **Minimal ISO** from the official Rocky Linux website (when available). The **Minimal installation** is preferred for hardening as it reduces the attack surface.
+2.  **Verify:** Check the downloaded ISO's integrity using the provided checksum (SHA256).
+3.  **Create Media:** Create a bootable USB drive or mount the ISO in your virtual environment.
+
+### 1.2 Boot and Start the Installer
+
+1.  Boot the system from the installation media.
+2.  Select **"Install Rocky Linux 10"** from the boot menu.
+
+### 1.3 Configure Installation Options
+
+Proceed through the Anaconda installer, paying close attention to the following sections:
+
+| Section | Recommended Configuration | Rationale |
+| :--- | :--- | :--- |
+| **Software Selection** | **Minimal Install** | Reduces the attack surface by installing only essential packages. |
+| **Installation Destination** | **Custom Partitioning** | Allows for separate mount points for enhanced security. |
+| **Networking & Hostname** | Set a descriptive **Hostname** (e.g., `server01.local`). | Enable the network adapter and set a static IP address if required. |
+| **Root Password** | Set a **strong, unique password** for the `root` user. | Essential security practice. |
+| **User Creation** | Create a standard user account with **Administrator** privileges checked (for use with `sudo`). | Avoids daily direct login as `root`. |
+
+### 1.4 Partitioning Recommendations
+
+For security and stability, use separate partitions for sensitive directories.
+
+  * `/boot` (1 GB, ext4)
+  * `/` (Root, 50 GB+, ext4 or XFS)
+  * `/home` (Separate partition, ext4 or XFS)
+  * `/var` (Separate partition, ext4 or XFS)
+  * `/tmp` (Separate partition, ext4 or XFS, consider adding `noexec` option)
+  * `swap` (Equal to RAM up to 4 GB, then 4 GB)
+
+### 1.5 Complete Installation
+
+1.  Click **"Begin Installation."**
+2.  Wait for the installation to complete, then **reboot** the system and remove the installation media.
+
+-----
+
+## 2\. Initial Hardening & Configuration
+
+After the first reboot, log in with the standard user account you created.
+
+### 2.1 Update the System
+
+Ensure all packages are up to date to patch known vulnerabilities.
+
+```bash
+sudo dnf update -y
+sudo reboot
+```
+
+### 2.2 Disable Unnecessary Services
+
+Review and stop any services not required for your server's purpose.
+
+```bash
+# List all running services
+sudo systemctl list-unit-files --state=enabled | grep enabled
+
+# Example command to disable a service (e.g., cups if not printing)
+# sudo systemctl disable cups.service
+```
+
+### 2.3 Configure Firewall
+
+Configure **firewalld** to only allow necessary traffic.
+
+```bash
+# Enable the firewall service
+sudo systemctl enable --now firewalld
+
+# Set the default zone
+sudo firewall-cmd --set-default-zone=public --permanent
+
+# Allow only SSH (required for remote access)
+sudo firewall-cmd --permanent --add-service=ssh
+
+# Example: Allow web traffic
+# sudo firewall-cmd --permanent --add-service=http
+# sudo firewall-cmd --permanent --add-service=https
+
+# Reload the firewall
+sudo firewall-cmd --reload
+```
+
+### 2.4 Install Auditing Tools
+
+Install tools to monitor and log system activity and integrity.
+
+```bash
+# Install the Audit daemon for system-wide auditing
+sudo dnf install audit -y
+# Optional: Install AIDE (Advanced Intrusion Detection Environment)
+# sudo dnf install aide -y
+# sudo aide --init
+# sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+```
+
+-----
+
+## 3\. SSH Hardening (Remote Access Security)
+
+Secure your primary remote access vector, **SSH**.
+
+### 3.1 Edit the SSH Configuration
+
+Open the configuration file:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+### 3.2 Apply Recommended Changes
+
+Modify or add the following lines:
+
+| Setting | Recommended Value | Rationale |
+| :--- | :--- | :--- |
+| `Port` | `[A high, custom number > 1024]` | Prevents trivial port-scanning attempts on the default port 22. |
+| `PermitRootLogin` | `no` | Prevents direct root login via SSH. |
+| `PasswordAuthentication` | `no` | **Highly Recommended.** Enforces key-based authentication. |
+| `ClientAliveInterval` | `300` | Logs out idle sessions after 5 minutes (300 seconds). |
+| `MaxAuthTries` | `3` | Limits the number of failed login attempts. |
+
+### 3.3 Enforce Key-Based Authentication
+
+1.  Generate an SSH key pair on your **local machine**.
+2.  Copy the public key to the Rocky Linux server using `ssh-copy-id`.
+3.  Once key-based login is verified, ensure `PasswordAuthentication no` is set in `/etc/ssh/sshd_config`.
+
+<!-- end list -->
+
+```bash
+# Reload the service after config changes:
+sudo systemctl reload sshd
+```
+
+-----
+
+## 4\. Kernel and System Hardening
+
+### 4.1 Apply Kernel Parameter Hardening
+
+Edit the `sysctl` configuration file to improve network and memory security.
+
+```bash
+sudo nano /etc/sysctl.d/99-sysctl.conf
+```
+
+Add the following recommended security lines:
+
+```sysctl
+# Disable packet forwarding
+net.ipv4.ip_forward = 0
+net.ipv6.conf.all.forwarding = 0
+
+# Enable SYN cookie protection
+net.ipv4.tcp_syncookies = 1
+
+# Disable Source Routed Packages and Redirects
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+
+# Randomize the address space layout (ASLR)
+kernel.randomize_va_space = 2
+```
+
+Apply the changes:
+
+```bash
+sudo sysctl -p /etc/sysctl.d/99-sysctl.conf
+```
+
+### 4.2 Restrict Sudo Use
+
+Ensure only users in the `wheel` group can use the `sudo` command.
+
+```bash
+sudo visudo
+# Ensure this line is uncommented:
+# %wheel  ALL=(ALL)       ALL
+```
+
+### 4.3 Configure SELinux
+
+Ensure **SELinux** (Security-Enhanced Linux) remains in **Enforcing** mode. **Do not disable it.**
+
+```bash
+sestatus
+```
+
+If you install new services, use `semanage` to update policies instead of changing the overall mode.
+
+### 4.4 Set Password Policy
+
+Enforce a strong password policy using the `pam_pwquality` module.
+
+```bash
+sudo nano /etc/security/pwquality.conf
+```
+
+Adjust parameters for strong requirements (e.g., minimum length 14, requiring mixed case, digits, and symbols):
+
+```pwquality
+minlen = 14
+dcredit = -1
+ucredit = -1
+lcredit = -1
+ocredit = -1
+```
+
+-----
+
+## 5\. Ongoing Maintenance
+
+### 5.1 Regular Updates
+
+Schedule regular system updates.
+
+```bash
+sudo dnf update -y
+```
+
+### 5.2 Intrusion Detection Checks
+
+Regularly check your AIDE database for file changes (if AIDE was installed).
+
+```bash
+# Check for changes
+sudo aide --check
+```
+
+### 5.3 Log Monitoring
+
+Regularly review system logs for unusual activity.
+
+```bash
+sudo journalctl -r
+```
